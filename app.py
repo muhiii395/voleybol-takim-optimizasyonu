@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import pandas as pd
 import pulp
@@ -96,7 +98,7 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP) - Doğrudan Değişken Tanımlı Sözlük
+# 3. Optimizasyon Motoru (PuLP) - %100 Hata Korumalı Değişken Tanımı
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
@@ -110,8 +112,11 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # PuLP dicts hatasını tamamen aşan doğrudan sözlük tanımı
-    x = {(i, p): pulp.LpVariable(f"Atama_{i}_{p}", cat="Binary") for i in oyuncular for p in pozisyonlar}
+    # PuLP tip hatalarını önleyen en kararlı karar değişkeni tanımı (LpBinary kullanımı)
+    x = {}
+    for idx, i in enumerate(oyuncular):
+        for p in pozisyonlar:
+            x[i, p] = pulp.LpVariable(f"var_{idx}_{p}", cat=pulp.LpBinary)
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
