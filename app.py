@@ -26,7 +26,7 @@ theta = st.sidebar.slider("Manşet (Receive - θ)", 0.0, 1.0, 0.15, 0.05)
 epsilon = st.sidebar.slider("Defans (Dig - ε)", 0.0, 1.0, 0.10, 0.05)
 gamma = st.sidebar.slider("Servis (Serve - γ)", 0.0, 1.0, 0.15, 0.05)
 
-# Örnek Veri Seti (Dosya Yüklenmediğinde)
+# Örnek Veri Seti
 @st.cache_data
 def load_sample_data():
     return pd.DataFrame({
@@ -40,9 +40,8 @@ def load_sample_data():
         "Serve": [85, 80, 82, 78, 70, 75, 70, 80, 82, 85, 0, 0]
     })
 
-# Sütun Dönüştürme / Haritalama Fonksiyonu
+# Veri Dönüştürme ve Temizleme Fonksiyonu
 def process_data(dataframe):
-    # Kaggle sütunlarını modelin kullandığı Türkçe sütun isimlerine eşliyoruz
     column_mapping = {
         'player': 'Oyuncu',
         'position': 'Pozisyon',
@@ -54,23 +53,33 @@ def process_data(dataframe):
         'serve': 'Serve'
     }
     
-    # Küçük/Büyük harf duyarlılığını önlemek için sütun isimlerini küçük harfe çevirelim
-    dataframe.columns = [c.strip().lower() for c in dataframe.columns]
-    
-    # İlgili sütunların adlarını değiştir
+    # Sütun isimlerini küçük harfe dönüştür ve temizle
+    dataframe.columns = [str(c).strip().lower() for c in dataframe.columns]
     dataframe = dataframe.rename(columns=column_mapping)
     
-    # Sadece gerekli sütunları seç (country, age vb. elenir)
     required_cols = ['Oyuncu', 'Pozisyon', 'Spike', 'Block', 'Set', 'Dig', 'Receive', 'Serve']
     
-    # Eksik sütun kontrolü
     for col in required_cols:
         if col not in dataframe.columns:
-            dataframe[col] = 0 # Veride yoksa varsayılan 0 değeri atar
+            dataframe[col] = 0
             
-    return dataframe[required_cols]
+    df_clean = dataframe[required_cols].copy()
+    
+    # Oyuncu isimlerini dizeye çevir, boşlukları temizle ve benzersiz yap
+    df_clean['Oyuncu'] = df_clean['Oyuncu'].astype(str).str.strip()
+    df_clean['Pozisyon'] = df_clean['Pozisyon'].astype(str).str.strip()
+    
+    # Sayısal sütunları sayıya dönüştür, sayı olmayan değerleri 0 yap
+    num_cols = ['Spike', 'Block', 'Set', 'Dig', 'Receive', 'Serve']
+    for col in num_cols:
+        df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
+        
+    # Çift oyuncu isimleri varsa sonuna numara ekle
+    df_clean['Oyuncu'] = df_clean['Oyuncu'] + df_clean.groupby('Oyuncu').cumcount().map(lambda x: f"_{x}" if x > 0 else "")
+    
+    return df_clean
 
-# Dosya Yükleme Mantığı
+# Dosya Yükleme
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
@@ -87,19 +96,20 @@ else:
     st.info("💡 CSV veya Excel yüklemediniz. Örnek veri seti kullanılıyor.")
     df = load_sample_data()
 
-# Ana Ekran Sekmeleri
+# Sekmeler
 tab1, tab2 = st.tabs(["📊 Oyuncu Veri Seti", "⚡ Optimizasyon ve Sonuçlar"])
 
 with tab1:
-    st.subheader("Mevcut Oyuncu Havuzu (Filtrelenmiş Veri)")
+    st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP)
-def run_optimization(df_input, a, b, d, e, t, g):
+# 3. Optimizasyon Motoru
+def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
     oyuncular = df_input['Oyuncu'].tolist()
     
+    # Güvenli Python sözlükleri
     spike = dict(zip(df_input['Oyuncu'], df_input['Spike']))
     block = dict(zip(df_input['Oyuncu'], df_input['Block']))
     set_stat = dict(zip(df_input['Oyuncu'], df_input['Set']))
@@ -108,34 +118,34 @@ def run_optimization(df_input, a, b, d, e, t, g):
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
     pozisyonlar = ["Ot", "h1", "h2", "st", "m1", "m2", "lt"]
-    x = pulp.LpVariable.dicts("Atama", [(i, p) for i in oyuncular for p in pozisyonlar], cat="Binary")
+    x = pulp.LpVariable.dicts("Atama", (oyuncular, pozisyonlar), cat="Binary")
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
-        a * spike[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "m1"] + x[i, "m2"]) +
-        b * block[i] * (x[i, "m1"] + x[i, "m2"]) +
-        d * set_stat[i] * x[i, "st"] +
-        e * dig[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
-        t * receive[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
-        g * serve[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "st"] + x[i, "m1"] + x[i, "m2"])
+        a * spike[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["m1"] + x[i]["m2"]) +
+        b * block[i] * (x[i]["m1"] + x[i]["m2"]) +
+        d * set_stat[i] * x[i]["st"] +
+        e * dig[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
+        t * receive[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
+        g * serve[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["st"] + x[i]["m1"] + x[i]["m2"])
         for i in oyuncular
     ])
 
     # Kısıtlar
     for p in pozisyonlar:
-        prob += pulp.lpSum([x[i, p] for i in oyuncular]) == 1
+        prob += pulp.lpSum([x[i][p] for i in oyuncular]) == 1
 
     for i in oyuncular:
-        prob += pulp.lpSum([x[i, p] for p in pozisyonlar]) <= 1
+        prob += pulp.lpSum([x[i][p] for p in pozisyonlar]) <= 1
 
-    # Streamlit Cloud CBC solver konfigürasyonu
+    # PuLP Solver
     solver = pulp.PULP_CBC_CMD(msg=False)
     prob.solve(solver)
 
     secilenler = []
     for p in pozisyonlar:
         for i in oyuncular:
-            if pulp.value(x[i, p]) == 1:
+            if pulp.value(x[i][p]) == 1:
                 secilenler.append({
                     "Atanan Pozisyon": p,
                     "Oyuncu": i,
@@ -149,10 +159,11 @@ def run_optimization(df_input, a, b, d, e, t, g):
                 })
     return pd.DataFrame(secilenler), pulp.value(prob.objective)
 
-# Ana Ekran Tab 2
+# Tab 2
 with tab2:
     if st.button("🚀 İdeal Takımı Hesapla", type="primary"):
-        res_df, score = run_optimization(df, alpha, beta, delta, epsilon, theta, gamma)
+        # Parametre sırası: df, a, b, d, t, e, g
+        res_df, score = run_optimization(df, alpha, beta, delta, theta, epsilon, gamma)
         
         st.metric("Toplam Takım Verimlilik Skoru (Z)", f"{score:.2f}")
         st.subheader("Oluşturulan Sahadaki İlk 6 + Libero")
@@ -165,4 +176,3 @@ with tab2:
         
         fig = px.line_polar(avg_stats, r='Değer', theta='İstatistik', line_close=True, title="Seçilen Kadronun Ortalama Güç Dağılımı")
         st.plotly_chart(fig, use_container_width=True)
-
