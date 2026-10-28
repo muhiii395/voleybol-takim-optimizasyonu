@@ -14,7 +14,7 @@ belirlediğiniz stratejik ağırlıklara göre **en verimli kadroyu** otomatik o
 
 # 2. Sol Panel (Sidebar) - Veri Yükleme ve Katsayı Ayarları
 st.sidebar.header("1. Veri Kaynağı")
-uploaded_file = st.sidebar.file_uploader("CSV Dosyanızı Yükleyin", type=["csv"])
+uploaded_file = st.sidebar.file_uploader("Veri Dosyanızı Yükleyin (CSV veya Excel)", type=["csv", "xlsx", "xls"])
 
 st.sidebar.header("2. Strateji ve Katsayı Ağırlıkları")
 st.sidebar.caption("Toplam katsayı etkisini belirlemek için slider'ları kullanın:")
@@ -41,8 +41,11 @@ def load_sample_data():
     })
 
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.success("CSV dosyası başarıyla yüklendi!")
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_excel(uploaded_file)
+    st.success("Veri dosyası başarıyla yüklendi!")
 else:
     st.info("💡 CSV yüklemediniz. Örnek veri seti kullanılıyor.")
     df = load_sample_data()
