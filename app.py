@@ -40,7 +40,7 @@ def load_sample_data():
         "Serve": [85, 80, 82, 78, 70, 75, 70, 80, 82, 85, 0, 0]
     })
 
-# Veri Temizleme ve Güvenli Dönüştürme
+# Veri Temizleme Fonksiyonu
 def process_data(dataframe):
     column_mapping = {
         'player': 'Oyuncu',
@@ -62,19 +62,14 @@ def process_data(dataframe):
             dataframe[col] = 0
             
     df_clean = dataframe[required_cols].copy()
-    
-    # Oyuncu isimlerini kesinlikle String yapalım ve boşlukları silelim
     df_clean['Oyuncu'] = df_clean['Oyuncu'].fillna("Bilinmeyen").astype(str).str.strip()
     df_clean['Pozisyon'] = df_clean['Pozisyon'].fillna("-").astype(str).str.strip()
     
-    # Sayısal değerlerdeki hataları temizleyelim
     num_cols = ['Spike', 'Block', 'Set', 'Dig', 'Receive', 'Serve']
     for col in num_cols:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
         
-    # Yinelenen (Aynı isimdeki) oyuncuları benzersiz yapalım
     df_clean['Oyuncu'] = df_clean['Oyuncu'] + df_clean.groupby('Oyuncu').cumcount().map(lambda x: f"_{x}" if x > 0 else "")
-    
     return df_clean
 
 # Dosya Yükleme
@@ -101,14 +96,13 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP) - Güvenli Liste Sözlük Yapısı
+# 3. Optimizasyon Motoru (PuLP) - Doğrudan Değişken Tanımlı Sözlük
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
     oyuncular = df_input['Oyuncu'].tolist()
     pozisyonlar = ["Ot", "h1", "h2", "st", "m1", "m2", "lt"]
     
-    # Sözlük tanımları
     spike = dict(zip(df_input['Oyuncu'], df_input['Spike']))
     block = dict(zip(df_input['Oyuncu'], df_input['Block']))
     set_stat = dict(zip(df_input['Oyuncu'], df_input['Set']))
@@ -116,26 +110,26 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # Değişken Tanimlama (Liste İndeksli Hata Yapmayan Yapı)
-    x = pulp.LpVariable.dicts("Atama", (oyuncular, pozisyonlar), cat="Binary")
+    # PuLP dicts hatasını tamamen aşan doğrudan sözlük tanımı
+    x = {(i, p): pulp.LpVariable(f"Atama_{i}_{p}", cat="Binary") for i in oyuncular for p in pozisyonlar}
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
-        a * spike[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["m1"] + x[i]["m2"]) +
-        b * block[i] * (x[i]["m1"] + x[i]["m2"]) +
-        d * set_stat[i] * x[i]["st"] +
-        e * dig[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
-        t * receive[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
-        g * serve[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["st"] + x[i]["m1"] + x[i]["m2"])
+        a * spike[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "m1"] + x[i, "m2"]) +
+        b * block[i] * (x[i, "m1"] + x[i, "m2"]) +
+        d * set_stat[i] * x[i, "st"] +
+        e * dig[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
+        t * receive[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
+        g * serve[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "st"] + x[i, "m1"] + x[i, "m2"])
         for i in oyuncular
     ])
 
     # Kısıtlar
     for p in pozisyonlar:
-        prob += pulp.lpSum([x[i][p] for i in oyuncular]) == 1
+        prob += pulp.lpSum([x[i, p] for i in oyuncular]) == 1
 
     for i in oyuncular:
-        prob += pulp.lpSum([x[i][p] for p in pozisyonlar]) <= 1
+        prob += pulp.lpSum([x[i, p] for p in pozisyonlar]) <= 1
 
     # Solver
     solver = pulp.PULP_CBC_CMD(msg=False)
@@ -144,7 +138,7 @@ def run_optimization(df_input, a, b, d, t, e, g):
     secilenler = []
     for p in pozisyonlar:
         for i in oyuncular:
-            if pulp.value(x[i][p]) == 1:
+            if pulp.value(x[i, p]) == 1:
                 secilenler.append({
                     "Atanan Pozisyon": p,
                     "Oyuncu": i,
@@ -174,4 +168,3 @@ with tab2:
         
         fig = px.line_polar(avg_stats, r='Değer', theta='İstatistik', line_close=True, title="Seçilen Kadronun Ortalama Güç Dağılımı")
         st.plotly_chart(fig, use_container_width=True)
-    
