@@ -26,7 +26,7 @@ theta = st.sidebar.slider("Manşet (Receive - θ)", 0.0, 1.0, 0.15, 0.05)
 epsilon = st.sidebar.slider("Defans (Dig - ε)", 0.0, 1.0, 0.10, 0.05)
 gamma = st.sidebar.slider("Servis (Serve - γ)", 0.0, 1.0, 0.15, 0.05)
 
-# Örnek Veri Seti
+# Örnek Veri Seti (Dosya Yüklenmediğinde)
 @st.cache_data
 def load_sample_data():
     return pd.DataFrame({
@@ -40,21 +40,58 @@ def load_sample_data():
         "Serve": [85, 80, 82, 78, 70, 75, 70, 80, 82, 85, 0, 0]
     })
 
+# Sütun Dönüştürme / Haritalama Fonksiyonu
+def process_data(dataframe):
+    # Kaggle sütunlarını modelin kullandığı Türkçe sütun isimlerine eşliyoruz
+    column_mapping = {
+        'player': 'Oyuncu',
+        'position': 'Pozisyon',
+        'attack': 'Spike',
+        'block': 'Block',
+        'set': 'Set',
+        'dig': 'Dig',
+        'receive': 'Receive',
+        'serve': 'Serve'
+    }
+    
+    # Küçük/Büyük harf duyarlılığını önlemek için sütun isimlerini küçük harfe çevirelim
+    dataframe.columns = [c.strip().lower() for c in dataframe.columns]
+    
+    # İlgili sütunların adlarını değiştir
+    dataframe = dataframe.rename(columns=column_mapping)
+    
+    # Sadece gerekli sütunları seç (country, age vb. elenir)
+    required_cols = ['Oyuncu', 'Pozisyon', 'Spike', 'Block', 'Set', 'Dig', 'Receive', 'Serve']
+    
+    # Eksik sütun kontrolü
+    for col in required_cols:
+        if col not in dataframe.columns:
+            dataframe[col] = 0 # Veride yoksa varsayılan 0 değeri atar
+            
+    return dataframe[required_cols]
+
+# Dosya Yükleme Mantığı
 if uploaded_file is not None:
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
-    st.success("Veri dosyası başarıyla yüklendi!")
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            raw_df = pd.read_csv(uploaded_file)
+        else:
+            raw_df = pd.read_excel(uploaded_file)
+            
+        df = process_data(raw_df)
+        st.success("Kaggle veri seti başarıyla yüklendi ve modele uyarlandı!")
+    except Exception as e:
+        st.error(f"Dosya işlenirken hata oluştu: {e}")
+        df = load_sample_data()
 else:
-    st.info("💡 CSV yüklemediniz. Örnek veri seti kullanılıyor.")
+    st.info("💡 CSV veya Excel yüklemediniz. Örnek veri seti kullanılıyor.")
     df = load_sample_data()
 
 # Ana Ekran Sekmeleri
 tab1, tab2 = st.tabs(["📊 Oyuncu Veri Seti", "⚡ Optimizasyon ve Sonuçlar"])
 
 with tab1:
-    st.subheader("Mevcut Oyuncu Havuzu")
+    st.subheader("Mevcut Oyuncu Havuzu (Filtrelenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
 # 3. Optimizasyon Motoru (PuLP)
@@ -73,7 +110,7 @@ def run_optimization(df_input, a, b, d, e, t, g):
     pozisyonlar = ["Ot", "h1", "h2", "st", "m1", "m2", "lt"]
     x = pulp.LpVariable.dicts("Atama", [(i, p) for i in oyuncular for p in pozisyonlar], cat="Binary")
 
-    # Amaç Fonksiyonu (Kağıttaki Modelin Birebir Karşılığı)
+    # Amaç Fonksiyonu
     prob += pulp.lpSum([
         a * spike[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "m1"] + x[i, "m2"]) +
         b * block[i] * (x[i, "m1"] + x[i, "m2"]) +
@@ -91,7 +128,7 @@ def run_optimization(df_input, a, b, d, e, t, g):
     for i in oyuncular:
         prob += pulp.lpSum([x[i, p] for p in pozisyonlar]) <= 1
 
-    # Streamlit Cloud kilitlenme önleyici solver konfigürasyonu
+    # Streamlit Cloud CBC solver konfigürasyonu
     solver = pulp.PULP_CBC_CMD(msg=False)
     prob.solve(solver)
 
@@ -102,7 +139,7 @@ def run_optimization(df_input, a, b, d, e, t, g):
                 secilenler.append({
                     "Atanan Pozisyon": p,
                     "Oyuncu": i,
-                    "Mevki": df_input.loc[df_input['Oyuncu'] == i, 'Pozisyon'].values[0],
+                    "Mevki": df_input.loc[df_input['Oyuncu'] == i, 'Pozisyon'].values[0] if 'Pozisyon' in df_input.columns else "-",
                     "Spike": spike[i],
                     "Block": block[i],
                     "Set": set_stat[i],
@@ -128,3 +165,4 @@ with tab2:
         
         fig = px.line_polar(avg_stats, r='Değer', theta='İstatistik', line_close=True, title="Seçilen Kadronun Ortalama Güç Dağılımı")
         st.plotly_chart(fig, use_container_width=True)
+
