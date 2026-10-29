@@ -96,7 +96,7 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru - 'cat' Parametresi Olmadan En Yalın Tanım
+# 3. Optimizasyon Motoru - Garantili PuLP Değişken Mimarisi
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
@@ -110,11 +110,11 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # Hiçbir opsiyonel keyword argümanı kullanmadan doğrudan LpVariable nesnesi
+    # Değişkenleri yalnızca isim alacak şekilde (yalın 2 argümanlı) tanımlıyoruz
     x = {}
     for idx, i in enumerate(oyuncular):
         for p in pozisyonlar:
-            x[i, p] = pulp.LpVariable(f"var_{idx}_{p}", 0, 1, "Integer")
+            x[i, p] = pulp.LpVariable(f"v_{idx}_{p}", lowBound=0, upBound=1, cat=pulp.LpBinary)
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
