@@ -69,6 +69,7 @@ def process_data(dataframe):
     for col in num_cols:
         df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce').fillna(0)
         
+    # Çift oyuncu isimlerini benzersiz yapma
     df_clean['Oyuncu'] = df_clean['Oyuncu'] + df_clean.groupby('Oyuncu').cumcount().map(lambda x: f"_{x}" if x > 0 else "")
     return df_clean
 
@@ -96,7 +97,7 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP) - %100 Uyumlu Değişken Tanımı
+# 3. Optimizasyon Motoru (PuLP) - Standart Garanti Tanım
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
@@ -110,29 +111,26 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # PuLP tip hatasını önleyen doğrudan sırasal argüman kullanımı (lowBound=0, upBound=1, cat=LpInteger)
-    x = {}
-    for idx, i in enumerate(oyuncular):
-        for p in pozisyonlar:
-            x[i, p] = pulp.LpVariable(f"v_{idx}_{p}", 0, 1, pulp.LpInteger)
+    # PuLP için en uyumlu ve temiz ikili değişken tanımı
+    x = pulp.LpVariable.dicts("X", (oyuncular, pozisyonlar), cat=pulp.LpBinary)
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
-        a * spike[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "m1"] + x[i, "m2"]) +
-        b * block[i] * (x[i, "m1"] + x[i, "m2"]) +
-        d * set_stat[i] * x[i, "st"] +
-        e * dig[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
-        t * receive[i] * (x[i, "lt"] + x[i, "h1"] + x[i, "h2"]) +
-        g * serve[i] * (x[i, "Ot"] + x[i, "h1"] + x[i, "h2"] + x[i, "st"] + x[i, "m1"] + x[i, "m2"])
+        a * spike[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["m1"] + x[i]["m2"]) +
+        b * block[i] * (x[i]["m1"] + x[i]["m2"]) +
+        d * set_stat[i] * x[i]["st"] +
+        e * dig[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
+        t * receive[i] * (x[i]["lt"] + x[i]["h1"] + x[i]["h2"]) +
+        g * serve[i] * (x[i]["Ot"] + x[i]["h1"] + x[i]["h2"] + x[i]["st"] + x[i]["m1"] + x[i]["m2"])
         for i in oyuncular
     ])
 
     # Kısıtlar
     for p in pozisyonlar:
-        prob += pulp.lpSum([x[i, p] for i in oyuncular]) == 1
+        prob += pulp.lpSum([x[i][p] for i in oyuncular]) == 1
 
     for i in oyuncular:
-        prob += pulp.lpSum([x[i, p] for p in pozisyonlar]) <= 1
+        prob += pulp.lpSum([x[i][p] for p in pozisyonlar]) <= 1
 
     # Solver
     solver = pulp.PULP_CBC_CMD(msg=False)
@@ -141,7 +139,7 @@ def run_optimization(df_input, a, b, d, t, e, g):
     secilenler = []
     for p in pozisyonlar:
         for i in oyuncular:
-            if pulp.value(x[i, p]) == 1:
+            if pulp.value(x[i][p]) == 1:
                 secilenler.append({
                     "Atanan Pozisyon": p,
                     "Oyuncu": i,
@@ -171,4 +169,3 @@ with tab2:
         
         fig = px.line_polar(avg_stats, r='Değer', theta='İstatistik', line_close=True, title="Seçilen Kadronun Ortalama Güç Dağılımı")
         st.plotly_chart(fig, use_container_width=True)
-
