@@ -226,7 +226,7 @@ with tab2:
                 st.subheader("Oluşturulan Sahadaki İlk 6 + Libero")
 
                 st.dataframe(
-                    res_df[["Atanan Pozisyon", "Oyuncu", "Mevki", "Spike", "Block", "Receive", "Set", "Serve"]],
+                    res_df[["Atanan Pozisyon", "Oyuncu", "Mevki", "Spike", "Block", "Receive", "Dig", "Set", "Serve"]],
                     use_container_width=True,
                 )
 
