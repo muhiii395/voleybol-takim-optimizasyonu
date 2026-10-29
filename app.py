@@ -114,7 +114,7 @@ def run_optimization(df_input, a, b, d, t, e, g):
     x = {}
     for idx, i in enumerate(oyuncular):
         for p in pozisyonlar:
-            x[i, p] = pulp.LpVariable(f"v_{idx}_{p}", lowBound=0, upBound=1, cat=pulp.LpBinary)
+           x[i, p] = pulp.LpVariable(f"v_{idx}_{p}", cat=pulp.LpBinary)
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
