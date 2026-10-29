@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 import pandas as pd
 import pulp
@@ -98,7 +96,7 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP) - %100 Hata Korumalı Değişken Tanımı
+# 3. Optimizasyon Motoru (PuLP) - %100 Uyumlu Değişken Tanımı
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
@@ -112,11 +110,11 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # PuLP tip hatalarını önleyen en kararlı karar değişkeni tanımı (LpBinary kullanımı)
+    # PuLP tip hatasını önleyen doğrudan sırasal argüman kullanımı (lowBound=0, upBound=1, cat=LpInteger)
     x = {}
     for idx, i in enumerate(oyuncular):
         for p in pozisyonlar:
-            x[i, p] = pulp.LpVariable(f"var_{idx}_{p}", cat=pulp.LpBinary)
+            x[i, p] = pulp.LpVariable(f"v_{idx}_{p}", 0, 1, pulp.LpInteger)
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
@@ -173,3 +171,4 @@ with tab2:
         
         fig = px.line_polar(avg_stats, r='Değer', theta='İstatistik', line_close=True, title="Seçilen Kadronun Ortalama Güç Dağılımı")
         st.plotly_chart(fig, use_container_width=True)
+
