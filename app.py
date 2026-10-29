@@ -40,7 +40,7 @@ def load_sample_data():
         "Serve": [85, 80, 82, 78, 70, 75, 70, 80, 82, 85, 0, 0]
     })
 
-# Veri Temizleme ve Uyumlaştırma Fonksiyonu
+# Veri Temizleme ve Uyumlaştırma
 def process_data(dataframe):
     column_mapping = {
         'player': 'Oyuncu',
@@ -96,7 +96,7 @@ with tab1:
     st.subheader("Mevcut Oyuncu Havuzu (İşlenmiş Veri)")
     st.dataframe(df, use_container_width=True)
 
-# 3. Optimizasyon Motoru (PuLP) - Sıfır Hata Değişken Yapısı
+# 3. Optimizasyon Motoru - 'cat' Parametresi Olmadan En Yalın Tanım
 def run_optimization(df_input, a, b, d, t, e, g):
     prob = pulp.LpProblem("Voleybol_Ideal_Takim", pulp.LpMaximize)
     
@@ -110,11 +110,11 @@ def run_optimization(df_input, a, b, d, t, e, g):
     receive = dict(zip(df_input['Oyuncu'], df_input['Receive']))
     serve = dict(zip(df_input['Oyuncu'], df_input['Serve']))
 
-    # PuLP dicts metoduna olan bağımlılığı kaldıran %100 güvenli sözlük yapısı
+    # Hiçbir opsiyonel keyword argümanı kullanmadan doğrudan LpVariable nesnesi
     x = {}
     for idx, i in enumerate(oyuncular):
         for p in pozisyonlar:
-            x[i, p] = pulp.LpVariable(f"var_{idx}_{p}", cat=pulp.LpBinary)
+            x[i, p] = pulp.LpVariable(f"var_{idx}_{p}", 0, 1, "Integer")
 
     # Amaç Fonksiyonu
     prob += pulp.lpSum([
